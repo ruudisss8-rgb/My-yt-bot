@@ -20,9 +20,10 @@ async def download_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     file_name = f"{update.message.chat_id}.mp4"
     ydl_opts = {
-        'format': 'best[ext=mp4]/best',
-        'outtmpl': file_name,
-        'quiet': True
+    'format': 'best',
+    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+    'nocheckcertificate': True,
+    'outtmpl': '%(title)s.%(ext)s',
     }
 
     try:
