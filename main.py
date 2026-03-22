@@ -47,4 +47,3 @@ def download_video(message):
         bot.reply_to(message, "කරුණාකර නිවැරදි YouTube ලින්ක් එකක් එවන්න. ⚠️")
 
 bot.polling()
-
