@@ -3,65 +3,94 @@ import telebot
 from telebot import types
 from yt_dlp import YoutubeDL
 
+# ඔබේ Bot Token එක මෙතනට දාන්න
 TOKEN = '8691187872:AAErOrvL3D_RgQWjLiL8TlaNNFVJrCcBrNs'
 bot = telebot.TeleBot(TOKEN)
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "ඔන්න වැඩේ අලුත් කළා! ලින්ක් එකක් එවන්න බලන්න. 📥")
+    bot.reply_to(message, "ආයුබෝවන්! YouTube ලින්ක් එකක් එවන්න. මම එය ඔබට අවශ්‍ය Quality එකෙන් ලබා දෙන්නම්. 📥")
 
 @bot.message_handler(func=lambda message: "youtube.com" in message.text or "youtu.be" in message.text)
 def handle_link(message):
     url = message.text
-    sent_msg = bot.reply_to(message, "වීඩියෝ තොරතුරු ගනිමින්... 🔍")
+    chat_id = message.chat.id
+    sent_msg = bot.reply_to(message, "වීඩියෝවේ තොරතුරු පරීක්ෂා කරමින් පවතිනවා... 🔍")
+
+    # YouTube එකට සාමාන්‍ය Browser එකක් ලෙස පෙනී සිටීමට Headers එකතු කිරීම
+    ydl_opts_info = {
+        'nocheckcertificate': True,
+        'quiet': True,
+        'no_warnings': True,
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
 
     try:
-        with YoutubeDL({'nocheckcertificate': True, 'quiet': True}) as ydl:
+        with YoutubeDL(ydl_opts_info) as ydl:
             info = ydl.extract_info(url, download=False)
-            markup = types.InlineKeyboardMarkup()
             
-            # පවතින quality ටික ලස්සනට පෙන්නන්න මෙහෙම කරමු
-            formats = [360, 480, 720]
-            for res in formats:
-                markup.add(types.InlineKeyboardButton(f"🎬 Video {res}p", callback_data=f"{res}_{url}"))
+            markup = types.InlineKeyboardMarkup()
+            # සාමාන්‍යයෙන් පවතින quality options
+            target_heights = [360, 480, 720]
+            
+            for h in target_heights:
+                # 50MB සීමාව ගැන පරිශීලකයා දැනුවත් කිරීම වැදගත්
+                markup.add(types.InlineKeyboardButton(f"🎬 Video {h}p", callback_data=f"{h}_{url}"))
             
             markup.add(types.InlineKeyboardButton("🎧 Audio (MP3)", callback_data=f"audio_{url}"))
-            bot.edit_message_text("ඔබට අවශ්‍ය Quality එක තෝරන්න:", message.chat.id, sent_msg.message_id, reply_markup=markup)
+            
+            bot.edit_message_text("ඔබට අවශ්‍ය Quality එක තෝරන්න:\n(සටහන: 50MB ට වැඩි වීඩියෝ ටෙලිග්‍රෑම් හරහා යැවිය නොහැක)", chat_id, sent_msg.message_id, reply_markup=markup)
             
     except Exception as e:
-        bot.edit_message_text(f"තොරතුරු ගැනීමේ දෝෂයක්: {str(e)}", message.chat.id, sent_msg.message_id)
+        # YouTube Bot Block එකක් තිබේ නම් එය මෙතැනදී හඳුනාගත හැක
+        bot.edit_message_text(f"දෝෂයක්: YouTube සීමාවන් නිසා තොරතුරු ගත නොහැක. පසුව උත්සාහ කරන්න. \n\nවිස්තරය: {str(e)}", chat_id, sent_msg.message_id)
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
     chat_id = call.message.chat.id
-    q_data = call.data.split('_', 1)
-    quality = q_data[0]
-    url = q_data[1]
+    data = call.data.split('_', 1)
+    quality = data[0]
+    url = data[1]
 
     bot.delete_message(chat_id, call.message.message_id)
-    status_msg = bot.send_message(chat_id, "ඩවුන්ලෝඩ් වෙමින් පවතී... ⏳")
+    status_msg = bot.send_message(chat_id, f"වීඩියෝව සකසමින් පවතිනවා... කරුණාකර රැඳී සිටින්න. ⏳")
 
-    file_name = f'file_{chat_id}.{"mp3" if quality == "audio" else "mp4"}'
+    file_name = f'video_{chat_id}.{"mp3" if quality == "audio" else "mp4"}'
     
-    # FFmpeg ප්‍රශ්නය මගහරින්න මේ විදිහට දෙනවා
+    # ඩවුන්ලෝඩ් කිරීමේදී භාවිතා වන Settings
+    ydl_opts = {
+        'outtmpl': file_name,
+        'nocheckcertificate': True,
+        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+
     if quality == "audio":
-        ydl_opts = {'format': 'bestaudio/best', 'outtmpl': file_name, 'postprocessors': [{'key': 'FFmpegExtractAudio','preferredcodec': 'mp3'}]}
+        ydl_opts['format'] = 'bestaudio/best'
     else:
-        # 50MB සීමාව නිසා අපි කෙලින්ම quality එකට limit එකක් දෙනවා
-        ydl_opts = {'format': f'bestvideo[height<={quality}][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best', 'outtmpl': file_name}
+        # ffmpeg නැති වුවහොත් ගැටලුව මගහරවා ගැනීමට 'best' format එක භාවිතා කිරීම
+        ydl_opts['format'] = f'best[height<={quality}][ext=mp4]/best[ext=mp4]/best'
 
     try:
         if os.path.exists(file_name): os.remove(file_name)
+        
         with YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
         
-        with open(file_name, 'rb') as f:
-            if quality == "audio": bot.send_audio(chat_id, f)
-            else: bot.send_video(chat_id, f)
-        
+        # ගොනුව පවතින්නේ දැයි පරීක්ෂා කර යැවීම
+        if os.path.exists(file_name):
+            with open(file_name, 'rb') as f:
+                if quality == "audio":
+                    bot.send_audio(chat_id, f)
+                else:
+                    bot.send_video(chat_id, f)
+            os.remove(file_name)
+        else:
+            raise FileNotFoundError("Download failed")
+
         bot.delete_message(chat_id, status_msg.message_id)
-        os.remove(file_name)
+        
     except Exception as e:
-        bot.edit_message_text(f"දෝෂයක්: බොහොමයක් විට 50MB ට වැඩියි. {str(e)}", chat_id, status_msg.message_id)
+        # ටෙලිග්‍රෑම් 50MB සීමාව හෝ සර්වර් ගැටලු මෙහිදී පෙන්වයි
+        bot.edit_message_text(f"දෝෂයක් සිදු වුණා: {str(e)}", chat_id, status_msg.message_id)
 
 bot.polling()
